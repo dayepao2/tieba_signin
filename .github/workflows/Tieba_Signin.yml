@@ -1,0 +1,36 @@
+name: Tieba_Signin
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: 0 23 * * *
+
+jobs:
+  Tieba_Signin:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Set time zone
+      run: | 
+        sudo timedatectl set-timezone 'Asia/Shanghai'
+    
+    - name: Checkout
+      uses: actions/checkout@v2
+    
+    - name: Setup python
+      uses: actions/setup-python@v2
+      with: 
+        python-version: '3.x'
+        architecture: 'x64'
+    
+    - name: Install library
+      run: | 
+        pip install -U requests[security]
+        pip install beautifulsoup4
+    
+    - name: Tieba_Signin
+      env: 
+        TIEBA_COOKIE: ${{ secrets.TIEBA_COOKIE }}
+        PUSH_KEY: ${{ secrets.PUSH_KEY }}
+      run: | 
+        python tieba_signin.py
