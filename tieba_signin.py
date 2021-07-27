@@ -2,52 +2,18 @@ import copy
 import datetime
 import json
 import os
-import re
-import sys
+import random
 import time
 
-import requests
 from bs4 import BeautifulSoup
 
+from auto_post import auto_post
+from method import (get_BSK, get_fid, get_list, get_method, get_mouse_pwd,
+                    get_post_list, get_tbs, post_method)
 
 TIEBA_COOKIE = str(os.environ.get("TIEBA_COOKIE"))
+IS_AUTO_POST = str(os.environ.get("IS_AUTO_POST"))
 PUSH_KEY = os.environ.get("PUSH_KEY")
-
-
-def get_method(url, headers=None):
-    k = 1
-    while k < 6:
-        try:
-            res = requests.get(url, headers=headers, timeout=5)
-        except Exception as e:
-            k = k + 1
-            print(sys._getframe().f_code.co_name + ": " + str(e))
-            time.sleep(1)
-            continue
-        else:
-            break
-    try:
-        return res
-    except Exception:
-        sys.exit(sys._getframe().f_code.co_name + ": " + "Max retries exceeded")
-
-
-def post_method(url, postdata=None, postjson=None, headers=None):
-    k = 1
-    while k < 6:
-        try:
-            res = requests.post(url, data=postdata, json=postjson, headers=headers, timeout=5)
-        except Exception as e:
-            k = k + 1
-            print(sys._getframe().f_code.co_name + ": " + str(e))
-            time.sleep(1)
-            continue
-        else:
-            break
-    try:
-        return res
-    except Exception:
-        sys.exit(sys._getframe().f_code.co_name + ": " + "Max retries exceeded")
 
 
 def onekeysignin():
@@ -58,7 +24,7 @@ def onekeysignin():
     print(soup)
 
 
-def check_cookie():
+def check_cookie(headers):
     url = "http://tieba.baidu.com/dc/common/tbs"
     res = get_method(url, headers)
     html = res.text
@@ -69,40 +35,15 @@ def check_cookie():
 
 
 def start_signin():
-    para.tbs = get_tbs()
-    tiebalist = get_list()
+    para.tbs = get_tbs(headers)
+    print(now + "\n正在获取关注贴吧列表...\n")
+    tiebalist = get_list(headers)
     para.pushstr = para.pushstr + now + "\n\n开始签到，共" + str(len(tiebalist)) + "个贴吧\n"
     print(tiebalist)
     print("\n" + now + "\n开始签到，共" + str(len(tiebalist)) + "个贴吧")
     signin(tiebalist, 1)
-
-
-def get_tbs():
-    url = "http://tieba.baidu.com/dc/common/tbs"
-    res = get_method(url, headers)
-    html = res.text
-    soup = BeautifulSoup(html, 'html.parser')
-    jsonstr = json.loads(soup.text)
-    tbs = jsonstr['tbs']
-    return tbs
-
-
-def get_list():
-    print(now + "\n正在获取关注贴吧列表...\n")
-    tiebalist = []
-    key = 1
-    while True:
-        url = "http://tieba.baidu.com/f/like/mylike?&pn=" + str(key)
-        res = get_method(url, headers)
-        html = res.text
-        temp_list = re.findall(re.compile('<a href="\\/f\\?kw=.*?" title="(.*?)">.+?<\\/a>'), html)
-        if temp_list:
-            tiebalist = tiebalist + temp_list
-            key = key + 1
-        else:
-            break
-        time.sleep(5)
-    return tiebalist
+    if IS_AUTO_POST == 'True':
+        start_post(tiebalist)
 
 
 def signin(tiebalist, key):
@@ -133,6 +74,30 @@ def signin(tiebalist, key):
         else:
             print("\n经过" + str(stop_key) + "轮签到后，下列贴吧签到失败\n" + str(tiebalist))
             para.pushstr = para.pushstr + "\n经过" + str(stop_key) + "轮签到后，下列贴吧签到失败\n" + str(tiebalist)
+
+
+def start_post(tiebalist):
+    para.pushstr = para.pushstr + "\n\n开始水贴，共" + str(len(tiebalist)) + "个贴吧\n"
+    print("\n\n开始水贴，共" + str(len(tiebalist)) + "个贴吧\n")
+    key = 0
+    temp_list = copy.deepcopy(tiebalist)
+    for tieba in tiebalist:
+        POST_CONTENT = '[emotion pic_type=1 width=30 height=30]//tb2.bdstatic.com/tb/editor/images/face/i_f' + str(random.randint(10, 50)) + '.png?t=20140803[/emotion]'
+        post_list = get_post_list(tieba, headers)
+        fid = get_fid(tieba, headers)
+        mouse_pwd, mouse_pwd_t = get_mouse_pwd()
+        bsk = get_BSK(para.tbs)
+        soup = auto_post(headers, tieba, fid, post_list[random.randint(3, 8)], para.tbs, POST_CONTENT, mouse_pwd, mouse_pwd_t, bsk)
+        if '"no":0' in str(soup):
+            key = key + 1
+            print(tieba + '吧 水贴成功')
+            temp_list.remove(tieba)
+        else:
+            print(tieba + '吧 水贴失败: ' + str(soup))
+        time.sleep(random.randint(120, 180))
+    para.pushstr = para.pushstr + "\n共" + str(len(tiebalist) - len(temp_list)) + "个贴吧水贴成功"
+    if temp_list:
+        para.pushstr = para.pushstr + "\n下列贴吧水贴失败\n" + str(temp_list)
 
 
 def push():
@@ -170,10 +135,9 @@ if __name__ == '__main__':
     }
     # onekeysignin()
     # get_list()
-    if check_cookie():
+    if check_cookie(headers):
         start_signin()
     else:
         print(now + "\nCookie已失效")
         para.pushstr = para.pushstr + now + "\n\nCookie已失效"
-
     PUSH_KEY and push()
