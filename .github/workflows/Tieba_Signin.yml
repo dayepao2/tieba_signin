@@ -27,10 +27,12 @@ jobs:
       run: | 
         pip install -U requests[security]
         pip install beautifulsoup4
+        pip install PyExecJS
     
     - name: Tieba_Signin
       env: 
         TIEBA_COOKIE: ${{ secrets.TIEBA_COOKIE }}
+        IS_AUTO_POST: ${{ secrets.IS_AUTO_POST }}
         PUSH_KEY: ${{ secrets.PUSH_KEY }}
       run: | 
         python tieba_signin.py
